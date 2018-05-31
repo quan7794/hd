@@ -231,7 +231,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Core.compare(result,new Scalar(3,3,3),result,Core.CMP_EQ);
         matrix2_grabcut = new Mat(sourceImage.size(),CvType.CV_8UC3,new Scalar(255,255,255));
         sourceImage.copyTo(matrix2_grabcut, result);
-        Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ UUID.randomUUID().toString()+".jpg",matrix2_grabcut);
+        Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "abc" +".jpg",matrix2_grabcut);
     }
 
     private void skinSegmentation(){
