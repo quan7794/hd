@@ -1,52 +1,27 @@
 package vn.com.tma.hdnghia.hairrecognite;
 
 import android.Manifest;
-import android.content.Context;
+import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Camera;
-import android.graphics.ImageFormat;
-import android.graphics.SurfaceTexture;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCaptureSession;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraDevice;
-import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CameraMetadata;
-import android.hardware.camera2.CaptureRequest;
-import android.hardware.camera2.TotalCaptureResult;
-import android.hardware.camera2.params.StreamConfigurationMap;
-import android.media.Image;
-import android.media.ImageReader;
+import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Environment;
-import android.os.Handler;
+import android.os.StrictMode;
 import android.provider.MediaStore;
 import android.support.annotation.NonNull;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.util.Log;
-import android.util.SparseIntArray;
-import android.view.Surface;
-import android.view.SurfaceView;
-import android.view.TextureView;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.tzutalin.dlib.Constants;
-import com.tzutalin.dlib.FaceDet;
-import com.tzutalin.dlib.VisionDetRet;
-
 import org.opencv.android.BaseLoaderCallback;
-import org.opencv.android.CameraBridgeViewBase;
-import org.opencv.android.JavaCameraView;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
@@ -62,144 +37,26 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
-import org.opencv.objdetect.CascadeClassifier;
 
-import java.io.BufferedWriter;
-import java.io.Console;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.ByteBuffer;
+import java.io.InputStream;
+import java.lang.reflect.Method;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.Random;
 
-public class MainActivity extends AppCompatActivity implements CameraBridgeViewBase.CvCameraViewListener2{
+import static android.provider.Settings.System.DATE_FORMAT;
 
-    private static  final String TAG = "OCV_Camera::Activity";
-
-    private CameraBridgeViewBase mOpenCvCameraView;
-    private int render=0;
-
-    private Mat mRgba;
-    private Mat mRgbaF;
-    private Mat mRgbaT;
-
-    private Mat mGray;
-    private Mat dst;
-    private Button btnCapture;
-    static final int REQUEST_IMAGE_CAPTURE = 1;
-    private boolean isPermissionGranted = false;
-    private int mScreenWidth = 640, mScreenHeight = 480;
-
-    private void dispatchTakePictureIntent() {
-        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
-            startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
-        }
-    }
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        setContentView(R.layout.activity_main);
-
-//        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
-//            requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE,Manifest.permission.READ_EXTERNAL_STORAGE},100);
-//        }
-
-        mOpenCvCameraView = (JavaCameraView) findViewById(R.id.opencvCameraView);
-        mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
-        mOpenCvCameraView.setMaxFrameSize(mScreenWidth,mScreenHeight);
-        mOpenCvCameraView.setCvCameraViewListener(this);
-
-        textureView = (TextureView)findViewById(R.id.textureView);
-        //From Java 1.4 , you can use keyword 'assert' to check expression true or false
-        assert textureView != null;
-        btnCapture = (Button)findViewById(R.id.btnCapture);
-    }
-
-    private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
-        @Override
-        public void onManagerConnected(int status) {
-            switch (status){
-                case BaseLoaderCallback.SUCCESS:
-                {
-                    Log.i(TAG, "OpenCV loaded successfully");
-                    mOpenCvCameraView.enableView();
-                } break;
-                default:
-                {
-                    super.onManagerConnected(status);
-                } break;
-            }
-        }
-    };
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        if (mOpenCvCameraView != null) {
-            mOpenCvCameraView.disableView();
-        }
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if(!OpenCVLoader.initDebug()){
-            Log.d(TAG,"Internal OpenCV library not found. Using OpenCV Manager for initialization");
-            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION,this, mLoaderCallback);
-        }else{
-            Log.d(TAG, "OpenCV library found inside package. Using it!");
-            mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if(mOpenCvCameraView!=null)
-            mOpenCvCameraView.disableView();
-    }
-
-    @Override
-    public void onCameraViewStarted(int width, int height) {
-        mRgba = new Mat(height, width, CvType.CV_8UC4);
-//        mRgbaF = new Mat(height, width, CvType.CV_8UC4);
-//        mRgbaT = new Mat(width, width, CvType.CV_8UC4);
-        mGray = new Mat();
-    }
-
-    @Override
-    public void onCameraViewStopped() {
-        mRgba.release();
-        mGray.release();
-    }
-
-    @Override
-    public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-//        mRgba = inputFrame.rgba();
-//        mGray = inputFrame.gray();
-//        dst = new Mat();
-//        Imgproc.resize(mRgba, dst, new Size(mScreenWidth,mScreenHeight));
-
-//        grabCut();
-//        skinSegmentation();
-//        setQuantizedImages();
-//        findImageDifference();
-//        performErosion_Dilution();
-//        findContours();
-////        return predict_hair();
-//        return matrix9_finalOutput;
-        return  null;
-    }
-
+public class CameraActivity2 extends Activity{
+    private static final int CAMERA_PHOTO = 111;
+    private Uri imageToUploadUri;
+    private static final int MY_CAMERA_PERMISSION_CODE = 100;
+    ImageView imageView;
+    TextView loading;
     Mat matrix2_grabcut;
     Mat matrix3_skindetection;
     Mat matrix5_grabcut_quantized;
@@ -208,11 +65,184 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
     Mat erosion_dilutionMatrix;
     Mat matrix8_max_contour;
     Mat matrix9_finalOutput;
+    Mat mat;
+//    Mat dst;
+    private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
+        @Override
+        public void onManagerConnected(int status) {
+            switch (status) {
+                case LoaderCallbackInterface.SUCCESS:
+                {
+                    Log.i("OpenCV", "OpenCV loaded successfully");
+                    mat=new Mat();
+//                    dst=new Mat();
+                } break;
+                default:
+                {
+                    super.onManagerConnected(status);
+                } break;
+            }
+        }
+    };
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        if(Build.VERSION.SDK_INT>=24){
+            try{
+                Method m = StrictMode.class.getMethod("disableDeathOnFileUriExposure");
+                m.invoke(null);
+            }catch(Exception e){
+                e.printStackTrace();
+            }
+        }
+        setContentView(R.layout.cameraview);
+        imageView = findViewById(R.id.imageView1);
+        loading = findViewById(R.id.txtLoading);
+        if (checkSelfPermission(Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                    MY_CAMERA_PERMISSION_CODE);
+        } else {
+            Intent chooserIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            File f = new File(Environment.getExternalStorageDirectory(), "POST_IMAGE.jpg");
+            chooserIntent.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(f));
+            imageToUploadUri = Uri.fromFile(f);
+            startActivityForResult(chooserIntent, CAMERA_PHOTO);
+        }
 
-    /**
-     * Paso uno
-     * @return
-     */
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!OpenCVLoader.initDebug()) {
+            Log.d("OpenCV", "Internal OpenCV library not found. Using OpenCV Manager for initialization");
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_4_0, this, mLoaderCallback);
+        } else {
+            Log.d("OpenCV", "OpenCV library found inside package. Using it!");
+            mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
+        }
+    }
+    public static Mat rotate(Mat src, double angle)
+    {
+        Mat dst = new Mat();
+        if(angle == 180 || angle == -180) {
+            Core.flip(src, dst, -1);
+        } else if(angle == 90 || angle == -270) {
+            Core.flip(src.t(), dst, 1);
+        } else if(angle == 270 || angle == -90) {
+            Core.flip(src.t(), dst, 0);
+        }
+
+        return dst;
+    }
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == CAMERA_PHOTO && resultCode == Activity.RESULT_OK) {
+            if(imageToUploadUri != null){
+                Uri selectedImage = imageToUploadUri;
+                getContentResolver().notifyChange(selectedImage, null);
+                Bitmap reducedSizeBitmap = getBitmap(imageToUploadUri.getPath());
+//                Bitmap reducedSizeBitmap = getBitmap(Environment.getExternalStorageDirectory()+"/quan.jpg");
+                if(reducedSizeBitmap != null){
+                    imageView.setRotation(90);
+                    Bitmap bmp32 = reducedSizeBitmap.copy(Bitmap.Config.ARGB_8888, true);
+                    imageView.setImageBitmap(bmp32);
+                    Utils.bitmapToMat(bmp32, mat);
+                    loading.setVisibility(View.VISIBLE);
+
+                    Mat newMat = new Mat(bmp32.getWidth(), bmp32.getHeight(), CvType.CV_8UC3);
+                    Imgproc.cvtColor(mat,newMat,Imgproc.COLOR_RGB2BGR);
+                    newMat=rotate(newMat,90);
+                    //Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "dstTest" +".jpg",newMat);
+                    grabCut(newMat);
+                    skinSegmentation();
+                    setQuantizedImages();
+                    findImageDifference(newMat);
+                    performErosion_Dilution();
+                    findContours(newMat);
+                    predict_hair();
+                    loading.setVisibility(View.INVISIBLE);
+                }else{
+                    Toast.makeText(this,"Error while capturing Image",Toast.LENGTH_LONG).show();
+                }
+            }else{
+                Toast.makeText(this,"Error while capturing Image",Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+//    public void Capture(View view) {
+//
+//    }
+    private Bitmap getBitmap(String path) {
+
+        Uri uri = Uri.fromFile(new File(path));
+        InputStream in = null;
+        try {
+            final int IMAGE_MAX_SIZE = 100000; // 1.2MP
+            try {
+                in = getContentResolver().openInputStream(uri);
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+
+            // Decode image size
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeStream(in, null, o);
+            try {
+                in.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+
+            int scale = 1;
+            while ((o.outWidth * o.outHeight) * (1 / Math.pow(scale, 2)) >
+                    IMAGE_MAX_SIZE) {
+                scale++;
+            }
+            Log.d("", "scale = " + scale + ", orig-width: " + o.outWidth + ", orig-height: " + o.outHeight);
+
+            Bitmap b = null;
+            in = getContentResolver().openInputStream(uri);
+            if (scale > 1) {
+                scale--;
+                // scale to max possible inSampleSize that still yields an image
+                // larger than target
+                o = new BitmapFactory.Options();
+                o.inSampleSize = scale;
+                b = BitmapFactory.decodeStream(in, null, o);
+
+                // resize to desired dimensions
+                int height = b.getHeight();
+                int width = b.getWidth();
+                Log.d("", "1th scale operation dimenions - width: " + width + ", height: " + height);
+
+                double y = Math.sqrt(IMAGE_MAX_SIZE
+                        / (((double) width) / height));
+                double x = (y / height) * width;
+
+                Bitmap scaledBitmap = Bitmap.createScaledBitmap(b, (int) x,
+                        (int) y, true);
+                b.recycle();
+                b = scaledBitmap;
+
+                System.gc();
+            } else {
+                b = BitmapFactory.decodeStream(in);
+            }
+            in.close();
+
+            Log.d("", "bitmap size - width: " + b.getWidth() + ", height: " +
+                    b.getHeight());
+            return b;
+        } catch (IOException e) {
+            Log.e("", e.getMessage(), e);
+            return null;
+        }
+    }
     private void grabCut(Mat srImage){
         Mat sourceImage = srImage;
 
@@ -225,11 +255,14 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
         Imgproc.grabCut(sourceImage, result,rectangle, bgModel,fgModel,10,Imgproc.GC_INIT_WITH_RECT);
         Core.compare(result,new Scalar(3,3,3),result,Core.CMP_EQ);
-        matrix2_grabcut = new Mat(sourceImage.size(),CvType.CV_8UC3,new Scalar(255,255,255));
+        matrix2_grabcut = new Mat(sourceImage.size(), CvType.CV_8UC3,new Scalar(255,255,255));
         sourceImage.copyTo(matrix2_grabcut, result);
+        Bitmap temp=null;
+        //Utils.matToBitmap(matrix2_grabcut, temp);
+        //imageView.setImageBitmap(temp);
         Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "grabcut" +".jpg",matrix2_grabcut);
-    }
 
+    }
     private void skinSegmentation(){
         matrix3_skindetection = new Mat(matrix2_grabcut.size(), matrix2_grabcut.type());
         matrix3_skindetection.setTo(new Scalar(0,0,255));
@@ -250,11 +283,18 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         Imgproc.GaussianBlur(skinMask,skinMask, new Size(3,3),0);
 
         Core.bitwise_and(matrix2_grabcut, matrix2_grabcut, matrix3_skindetection, skinMask);
-    }
 
+        //Bitmap temp=null;
+        //Utils.matToBitmap(matrix3_skindetection, temp);
+        //imageView.setImageBitmap(temp);
+        Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "skinDetection" +".jpg",matrix3_skindetection);
+
+    }
     private void setQuantizedImages() {
         matrix5_grabcut_quantized = this.quantizeImage(matrix2_grabcut);
         matrix6_skin_quantized = this.quantizeImage(matrix3_skindetection);
+        Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "matrix5_grabcut_quantized" +".jpg",matrix5_grabcut_quantized);
+        Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "matrix6_skin_quantized" +".jpg",matrix6_skin_quantized);
     }
 
     private  Mat quantizeImage(Mat image) {
@@ -294,7 +334,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
 
     }
 
-    private void findImageDifference() {
+    private void findImageDifference(Mat dst) {
         matrix7_output = new Mat(dst.size(),dst.type());
         matrix7_output.setTo(new Scalar(255,255,255));      //white colored image
         int rows = dst.rows();
@@ -316,6 +356,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
                     //double pixel_val[] = new double[3];
                     //pixel_val[0]=pixel_val[1]=pixel_val[2]=0;
                     matrix7_output.put(r, c, orgImage_pixel_val);
+                    Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "matrix7_output" +".jpg",matrix7_output);
+
                 }
             }
         }
@@ -329,6 +371,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         //erosion
         Mat element1 = Imgproc.getStructuringElement(Imgproc.MORPH_ERODE,  new Size(2*erosion_size + 1, 2*erosion_size+1));
         Imgproc.erode(matrix7_output, erosion_dilutionMatrix, element1);
+        Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "erosion_dilutionMatrix" +".jpg",erosion_dilutionMatrix);
 
             /*
             //dilation
@@ -337,7 +380,7 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
             */
     }
 
-    private void findContours(){
+    private void findContours(Mat dst){
 
         //Mat orgImage = Imgcodecs.imread(imageFilePath); //load image
         Mat grayImage = new Mat();
@@ -400,45 +443,10 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         int erosion_size=2;
         Mat element2 = Imgproc.getStructuringElement(Imgproc.MORPH_DILATE,  new Size(2*erosion_size + 1, 2*erosion_size+1));
         Imgproc.dilate(matrix9_finalOutput,matrix9_finalOutput, element2);
+        Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "matrix8_max_contour" +".jpg",matrix8_max_contour);
+        Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "matrix9_finalOutput" +".jpg",matrix9_finalOutput);
 
-        // Imgproc.drawContours(mask, contours, maxAreaIndex, new Scalar(255,255,255));
 
-
-        /*
-        //--------------code for copying original image with mask--------------------------
-        //Mat croppedImage = new Mat(orgImage.size(),CvType.CV_8UC3);
-        Mat croppedImage = new Mat(orgImage.size(),orgImage.type());
-        //Mat croppedImage = Mat.ones(orgImage.size(), orgImage.type());
-        croppedImage.setTo(new Scalar(0,0,0));
-        String destinationPath = "/home/sujit25/Pictures/croppedImage.png";
-        orgImage.copyTo(croppedImage, mask);              // copy original image with mask
-        Imgcodecs.imwrite(destinationPath, croppedImage);
-        return destinationPath;
-        */
-        /* //normalize and save mask
-        //Core.normalize(mask, mask,0,255,Core.NORM_MINMAX,CvType.CV_8UC3);
-         // write mask
-        String destinationPath2 = "/home/sujit25/Pictures/maskImage.png";
-        Imgcodecs.imwrite(destinationPath2,mask);
-        return destinationPath2;
-        */
-
-         /*
-        //---------------code for grabcut with final mask------------------------------/
-        Mat bgModel = new Mat();        //background model
-        Mat fgModel = new Mat();        //foreground model
-        Rect rectangle = Imgproc.boundingRect(contours.get(maxAreaIndex));  //draw a rectangle around maximum area contour
-        Mat result = new Mat();
-
-        Imgproc.grabCut(orgImage, result, rectangle, bgModel, fgModel,1,Imgproc.GC_INIT_WITH_RECT);
-        Core.compare(result,new Scalar(3,3,3),result,Core.CMP_EQ);
-        Mat foreground = new Mat(orgImage.size(),CvType.CV_8UC3,new Scalar(0,0,255));
-        orgImage.copyTo(foreground, result);
-        String destination = "/home/sujit25/Pictures/Results/face4_contourImage.png";
-        Imgcodecs.imwrite(destination, foreground);
-        return destination;
-        */
-        //  return this.skinSegmentation_WithThreshold(destination);
     }
 
     public Mat predict_hair() {
@@ -460,55 +468,8 @@ public class MainActivity extends AppCompatActivity implements CameraBridgeViewB
         {
             Imgproc.line(histImage, new Point(bin_w * (i - 1), hist_h - Math.round(hsv_histogram.get(i - 1, 0)[0])), new Point(bin_w * (i), hist_h - Math.round(hsv_histogram.get(i, 0)[0])), new Scalar(255,0,0),2);
         }
+        Imgcodecs.imwrite(Environment.getExternalStorageDirectory()+"/"+ "histImage" +".jpg",histImage);
 
         return histImage;
     }
-
-    /**
-     * Devuelve una imagen en blanco y negro donde se distingen los contornos de las cosas
-     * @param gray imagen inicial en escala de grises
-     * @return imagen en blando y negro con contornos
-     */
-    private Mat contoursWithImageinBlackAndWhite(Mat gray){
-        Imgproc.blur(gray,gray, new Size(3,3));
-        Mat canny_output = new Mat();
-        List<MatOfPoint> contours = new ArrayList<>();
-        Mat hierarchay = new Mat();
-        Imgproc.Canny(gray,canny_output,100,100*2);
-        Imgproc.findContours(canny_output,contours,hierarchay,Imgproc.RETR_TREE,Imgproc.CHAIN_APPROX_SIMPLE,new Point(0,0));
-        Mat drawing = Mat.zeros(canny_output.size(), CvType.CV_8UC3);
-        for (int i =0; i<contours.size(); i++){
-            Scalar color = new Scalar(255,255,255);
-            Imgproc.drawContours(drawing,contours,i,color,1,1,hierarchay,0,new Point());
-        }
-        return drawing;
-    }
-
-    /**
-     * A native method that is implemented by the 'native-lib' native library,
-     * which is packaged with this application.
-     */
-    //public native String stringFromJNI();
-
-    private File file;
-    private CaptureRequest.Builder captureRequestBuilder;
-    private TextureView textureView;
-    private CameraCaptureSession cameraCaptureSessions;
-    private android.util.Size imageDimension;
-    private Handler mBackgroundHandler;
-    private static final int REQUEST_CAMERA_PERMISSION = 200;
-    private Mat rsImage;
-
-
-
-
-    private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
-    static{
-        ORIENTATIONS.append(Surface.ROTATION_0,90);
-        ORIENTATIONS.append(Surface.ROTATION_90,0);
-        ORIENTATIONS.append(Surface.ROTATION_180,270);
-        ORIENTATIONS.append(Surface.ROTATION_270,180);
-    }
-
-
 }
